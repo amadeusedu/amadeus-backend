@@ -1,0 +1,58 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+type Query {
+  """Return profile for currently authenticated user"""  
+  me: Profile!
+  """Fetch arbitrary profile"""  
+  profile(id: ID!): Profile
+  """List roles attached to a user"""  
+  roles(userId: ID!): [Role!]!
+}
+
+type Mutation {
+  """Partial update of own profile"""  
+  updateProfile(input: UpdateProfileInput!): Profile!
+  """Ask Policy Engine for decision"""  
+  authorize(input: AuthorizeInput!): PolicyDecision!
+}
+
+"""User profile object"""  
+type Profile {
+  userId: ID!
+  fullName: String!
+  avatarUrl: String
+  vceSubjects: [String!]
+  bio: String
+  updatedAt: String!
+}
+
+"""System role enumeration"""  
+enum Role {
+  STUDENT
+  TUTOR
+  ADMIN
+}
+
+input UpdateProfileInput {
+  fullName: String
+  avatarUrl: String
+  vceSubjects: [String!]
+  bio: String
+}
+
+input AuthorizeInput {
+  subject: String!
+  action: String!
+  resource: String!
+  context: JSON
+}
+
+type PolicyDecision {
+  allow: Boolean!
+  reason: String
+}
+
+scalar JSON
