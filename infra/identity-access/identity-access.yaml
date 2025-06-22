@@ -1,0 +1,184 @@
+openapi: 3.1.0
+info:
+  title: Amadeus Identity & Access API
+  version: "1.0.0"
+servers:
+  - url: https://api.dev.amadeuseducation.com
+  - url: https://api.amadeuseducation.com
+security:
+  - BearerAuth: []
+paths:
+  /auth/register:
+    post:
+      summary: Register new account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Created – returns short-lived JWT + refresh
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /auth/login:
+    post:
+      summary: Email + password login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /auth/refresh:
+    post:
+      summary: Exchange refresh for new JWT pair
+      responses:
+        "200":
+          description: New tokens
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /profiles/me:
+    get:
+      summary: Get current user profile
+      responses:
+        "200":
+          description: Profile object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Partial update (JSON Patch RFC 6902)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/JsonPatch"
+      responses:
+        "204": { description: Updated }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /policy/decide:
+    post:
+      summary: Authorisation decision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyDecisionRequest"
+      responses:
+        "200":
+          description: Allow or deny
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyDecisionResponse"
+        "403": { $ref: "#/components/responses/Forbidden" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+    LoginRequest:
+      allOf:
+        - $ref: "#/components/schemas/RegisterRequest"
+    TokenPair:
+      type: object
+      properties:
+        accessToken: { type: string, description: "JWT" }
+        refreshToken: { type: string }
+        expiresIn: { type: integer, example: 900 }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        status: { type: string, enum: [PENDING, ACTIVE, LOCKED] }
+        createdAt: { type: string, format: date-time }
+    Profile:
+      type: object
+      properties:
+        userId: { type: string, format: uuid }
+        fullName: { type: string }
+        avatarUrl: { type: string, format: uri, nullable: true }
+        vceSubjects:
+          type: array
+          items: { type: string }
+        bio: { type: string, nullable: true }
+        updatedAt: { type: string, format: date-time }
+    PolicyDecisionRequest:
+      type: object
+      required: [subject, action, resource]
+      properties:
+        subject: { type: string }
+        action: { type: string }
+        resource: { type: string }
+        context: { type: object }
+    PolicyDecisionResponse:
+      type: object
+      required: [allow]
+      properties:
+        allow: { type: boolean }
+        reason: { type: string }
+    JsonPatch:
+      type: object
+      required: [op, path]
+      properties:
+        op: { type: string, enum: [add, remove, replace, copy, move, test] }
+        path: { type: string }
+        value: {}
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string }
+        message: { type: string }
+        correlationId: { type: string }
+  responses:
+    ValidationError:
+      description: Bad request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthenticated:
+      description: Missing/invalid credentials
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Authorisation denied
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource missing
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
