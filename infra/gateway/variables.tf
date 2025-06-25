@@ -1,26 +1,11 @@
-variable "aws_region" {
-  description = "AWS deployment region"
+variable "auth_issuer_url" {
+  description = "URL of the future Auth service that will issue JWTs"
   type        = string
-  default     = "ap-southeast-2"
+  default     = "https://auth.dev.amadeus-academics.com"
 }
 
-variable "vpc_cidr" {
-  type        = string
-  default     = "10.20.0.0/16"
-}
-
-variable "public_subnet_cidr" {
-  type        = string
-  default     = "10.20.1.0/24"
-}
-
-variable "private_subnet_cidr" {
-  type        = string
-  default     = "10.20.2.0/24"
-}
-
-variable "az" {
-  description = "Availability Zone for subnets"
-  type        = string
-  default     = "ap-southeast-2a"
+variable "auth_audience" {
+  description = "Audience claim expected in incoming JWTs (array)"
+  type        = list(string)
+  default     = ["amadeus-academics-api"]
 }
