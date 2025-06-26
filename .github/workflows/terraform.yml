@@ -3,9 +3,7 @@ name: Terraform Blue-Green Deploy
 on:
   pull_request:
   push:
-    branches:
-      - staging
-      - main
+    branches: [staging, main]
 
 jobs:
   terraform:
@@ -16,17 +14,31 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: infra/gateway   # all terraform commands run here
+        working-directory: infra/gateway
 
     steps:
-      # 1. Checkout code
+      # 1. Check out code
       - uses: actions/checkout@v3
 
       # 2. Install Terraform CLI
       - uses: hashicorp/setup-terraform@v2
 
-      # 3. Select (or create) workspace
-      - name: Select workspace
+      # 3. Configure AWS credentials from repo secrets
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # 4. Cache downloaded providers to speed up builds
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+
+      # 5. Select or create the correct workspace
+      - name: Select workspace (staging or production)
         id: ws
         run: |
           if [[ "${GITHUB_REF##*/}" == "main" ]]; then
@@ -34,36 +46,36 @@ jobs:
           else
             WS=staging
           fi
-
-          # create workspace if it doesn't exist
           terraform workspace list | grep -q "$WS" || terraform workspace new "$WS"
           terraform workspace select "$WS"
-
           echo "ws=$WS" >> "$GITHUB_OUTPUT"
 
-      # 4. Terraform init
+      # 6. Init Terraform
       - name: Terraform init
         run: terraform init -reconfigure
-      # 5. Determine next colour (blue ⇄ green)
-      - name: Decide colour
+
+      # 7. Decide which colour to deploy
+      - name: Decide next colour
         id: colour
         run: |
           if [[ "${{ steps.ws.outputs.ws }}" == "production" ]]; then
-            CURRENT=$(terraform state show aws_apigatewayv2_stage.bg_stage 2>/dev/null | awk '/name/ {print $3}')
-            [[ "$CURRENT" == "blue" ]] && NEXT=green || NEXT=blue
+            CURRENT=$(terraform state list | grep aws_apigatewayv2_stage.bg_stage || true)
+            if [[ "$CURRENT" == *"blue"* ]]; then NEXT=green; else NEXT=blue; fi
           else
             NEXT=blue
           fi
           echo "Deploying colour: $NEXT"
           echo "next=$NEXT" >> "$GITHUB_OUTPUT"
-      # 6. Plan on pull-request
+
+      # 8. Plan on pull-request events
       - name: Terraform plan
         if: ${{ github.event_name == 'pull_request' }}
         run: |
           terraform plan \
             -var="environment=${{ steps.ws.outputs.ws }}" \
             -var="deployment_color=${{ steps.colour.outputs.next }}"
-      # 7. Apply on push to staging / main
+
+      # 9. Apply on pushes to staging / main
       - name: Terraform apply
         if: ${{ github.event_name == 'push' }}
         run: |
