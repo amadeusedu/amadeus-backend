@@ -1,0 +1,29 @@
+provider "aws" {
+  region = "us-west-2"
+}
+
+# PostgreSQL RDS with automated backups
+resource "aws_db_instance" "postgres" {
+  identifier           = "ops-postgres-db"
+  engine               = "postgres"
+  instance_class       = "db.t3.micro"
+  allocated_storage    = 20
+  name                 = "opsdb"
+  username             = "admin"
+  password             = "changeme123"
+  backup_retention_period = 7
+  backup_window          = "02:00-03:00"
+  skip_final_snapshot    = true
+}
+
+# (Redis replication group was created earlier with snapshot retention)
+# If needed, ensure Redis snapshots:
+resource "aws_elasticache_replication_group" "redis" {
+  replication_group_id          = "featureflag-redis"
+  engine                        = "redis"
+  node_type                     = "cache.t3.micro"
+  number_cache_clusters         = 2
+  automatic_failover_enabled    = true
+  snapshot_retention_limit      = 7
+  snapshot_window               = "05:00-06:00"
+}
