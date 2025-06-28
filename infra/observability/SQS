@@ -1,0 +1,4 @@
+# SQS queue for Job Runner jobs
+resource "aws_sqs_queue" "job_runner_queue" {
+  name = "job-runner-queue"
+}
