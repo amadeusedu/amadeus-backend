@@ -1,0 +1,14 @@
+provider "aws" {
+  region = "us-west-2"
+}
+
+# Redis replication group for Feature Flags and Rate Limiting
+resource "aws_elasticache_replication_group" "redis" {
+  replication_group_id          = "featureflag-redis"
+  engine                        = "redis"
+  node_type                     = "cache.t3.micro"
+  number_cache_clusters         = 2
+  automatic_failover_enabled    = true
+  snapshot_retention_limit      = 7
+  snapshot_window               = "05:00-06:00"
+}
