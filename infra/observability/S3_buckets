@@ -1,0 +1,74 @@
+# Primary S3 bucket for backups
+resource "aws_s3_bucket" "backups_primary" {
+  bucket = "amadeus-backups-primary"
+  versioning {
+    enabled = true
+  }
+}
+
+# Secondary S3 bucket in another region
+resource "aws_s3_bucket" "backups_secondary" {
+  bucket = "amadeus-backups-secondary"
+  versioning {
+    enabled = true
+  }
+}
+
+# IAM role for S3 replication
+resource "aws_iam_role" "replication_role" {
+  name = "s3-replication-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Action    = "sts:AssumeRole",
+      Effect    = "Allow",
+      Principal = { Service = "s3.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "replication_policy" {
+  name = "replication-policy"
+  role = aws_iam_role.replication_role.id
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "s3:GetObject",
+          "s3:ReplicateObject",
+          "s3:ReplicateDelete",
+          "s3:List*"
+        ],
+        Resource = [
+          "${aws_s3_bucket.backups_primary.arn}/*",
+          "${aws_s3_bucket.backups_secondary.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow",
+        Action = ["s3:PutReplicationConfiguration"],
+        Resource = aws_s3_bucket.backups_primary.arn
+      }
+    ]
+  })
+}
+
+# S3 replication configuration
+resource "aws_s3_bucket_replication_configuration" "replicate" {
+  bucket = aws_s3_bucket.backups_primary.id
+  role   = aws_iam_role.replication_role.arn
+
+  rule {
+    id     = "replication-rule"
+    status = "Enabled"
+    destination {
+      bucket        = aws_s3_bucket.backups_secondary.arn
+      storage_class = "STANDARD"
+    }
+    filter {
+      prefix = ""  # replicate all objects
+    }
+  }
+}
