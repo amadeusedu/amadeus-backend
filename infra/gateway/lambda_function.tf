@@ -1,7 +1,6 @@
 # infra/gateway/lambda_function.tf
 # Lambda function for /status
 
-resource "aws_lambda_function" "status_fn" {
   function_name = "amadeus-status"
 
   s3_bucket = var.status_lambda_s3_bucket
