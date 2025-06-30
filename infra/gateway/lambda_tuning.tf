@@ -1,4 +1,4 @@
-resource "aws_lambda_function" "status_fn" {
+
   # existing properties ...
   function_name = "amadeus-status"
   s3_bucket     = var.status_lambda_s3_bucket
