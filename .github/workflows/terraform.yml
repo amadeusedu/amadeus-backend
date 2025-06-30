@@ -1,1 +1,83 @@
+# .github/workflows/terraform.yml
+name: Terraform Blue-Green Deploy
+
+on:
+  pull_request:
+  push:
+    branches: [staging, main]
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    env:
+      TF_CLI_ARGS: "-no-color"
+      AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: infra/gateway
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+
+      - id: ws
+        name: Init & select workspace
+        run: |
+          terraform init -reconfigure
+          if [[ "${GITHUB_REF##*/}" == "main" ]]; then
+            WS=production
+          else
+            WS=staging
+          fi
+          terraform workspace list | grep -q "$WS" || terraform workspace new "$WS"
+          terraform workspace select "$WS"
+          echo "ws=$WS" >> "$GITHUB_OUTPUT"
+
+      - id: colour
+        name: Decide next colour
+        run: |
+          if [[ "${{ steps.ws.outputs.ws }}" == "production" ]]; then
+            # Flip between blue and green in prod
+            if terraform state list | grep -q aws_apigatewayv2_stage.blue; then
+              NEXT=green
+            else
+              NEXT=blue
+            fi
+          else
+            # Always deploy blue in staging
+            NEXT=blue
+          fi
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform plan
+        if: github.event_name == 'pull_request'
+        run: |
+          terraform plan \
+            -var="environment=${{ steps.ws.outputs.ws }}" \
+            -var="deployment_color=${{ steps.colour.outputs.next }}"
+
+      - name: Terraform apply
+        if: github.event_name == 'push'
+        run: |
+          terraform apply -auto-approve \
+            -var="environment=${{ steps.ws.outputs.ws }}" \
+            -var="deployment_color=${{ steps.colour.outputs.next }}"
 
